@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FastBox Dispatch Control</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* ── Reset & Base ─────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #080D1A;
+    --panel:     #0F1623;
+    --surface:   #162032;
+    --border:    #1E2D42;
+    --cyan:      #00D4FF;
+    --cyan-dim:  rgba(0, 212, 255, 0.12);
+    --orange:    #FF6B35;
+    --green:     #22D3A0;
+    --yellow:    #F5C842;
+    --text:      #D4E0F0;
+    --muted:     #5A7490;
+    --mono:      'JetBrains Mono', monospace;
+    --sans:      'Space Grotesk', sans-serif;
+
+    /* Agent route colors */
+    --c0: #00D4FF;
+    --c1: #FF6B35;
+    --c2: #A78BFA;
+    --c3: #22D3A0;
+    --c4: #F5C842;
+    --c5: #F87171;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  /* ── Layout ───────────────────────────────────────── */
+  .app {
+    display: grid;
+    grid-template-rows: 52px 1fr auto;
+    grid-template-columns: 340px 1fr;
+    grid-template-areas:
+      "header  header"
+      "sidebar map"
+      "report  report";
+    height: 100vh;
+    min-height: 600px;
+  }
+
+  /* ── Header ───────────────────────────────────────── */
+  header {
+    grid-area: header;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 0 24px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    position: relative;
+  }
+  .logo-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--cyan);
+    box-shadow: 0 0 10px var(--cyan);
+    flex-shrink: 0;
+  }
+  header h1 {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--text);
+  }
+  header h1 span { color: var(--cyan); }
+  .header-tag {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    padding: 3px 8px;
+    border-radius: 3px;
+  }
+
+  /* ── Sidebar ──────────────────────────────────────── */
+  .sidebar {
+    grid-area: sidebar;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .sidebar-section {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .sidebar-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+    margin-bottom: 8px;
+  }
+  #json-input {
+    width: 100%;
+    flex: 1;
+    resize: none;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--cyan);
+    font-family: var(--mono);
+    font-size: 11.5px;
+    line-height: 1.6;
+    padding: 10px 12px;
+    outline: none;
+    border-radius: 4px;
+    transition: border-color 0.2s;
+    min-height: 280px;
+  }
+  #json-input:focus { border-color: var(--cyan); }
+
+  .controls { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+
+  .toggle-row {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 12px; color: var(--muted);
+  }
+  .toggle {
+    position: relative; width: 36px; height: 20px;
+    cursor: pointer;
+  }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle-track {
+    position: absolute; inset: 0;
+    background: var(--border);
+    border-radius: 20px;
+    transition: background 0.2s;
+  }
+  .toggle input:checked + .toggle-track { background: var(--cyan); }
+  .toggle-thumb {
+    position: absolute; width: 14px; height: 14px;
+    top: 3px; left: 3px;
+    background: white; border-radius: 50%;
+    transition: transform 0.2s;
+  }
+  .toggle input:checked ~ .toggle-thumb { transform: translateX(16px); }
+
+  #run-btn {
+    width: 100%;
+    padding: 12px;
+    background: var(--cyan);
+    color: #080D1A;
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 700;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    letter-spacing: 0.03em;
+    transition: opacity 0.15s, transform 0.1s;
+  }
+  #run-btn:hover { opacity: 0.88; }
+  #run-btn:active { transform: scale(0.98); }
+  #run-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  #error-msg {
+    display: none;
+    background: rgba(248,113,113,0.1);
+    border: 1px solid rgba(248,113,113,0.3);
+    color: #F87171;
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 8px 10px;
+    border-radius: 4px;
+    line-height: 1.5;
+  }
+
+  /* ── Map Area ─────────────────────────────────────── */
+  .map-area {
+    grid-area: map;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+  }
+  .map-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 10px 20px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .legend-item {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px; color: var(--muted);
+  }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .legend-sq {
+    width: 10px; height: 10px;
+    transform: rotate(0deg);
+    flex-shrink: 0;
+  }
+
+  .canvas-wrap {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: var(--bg);
+    overflow: hidden;
+  }
+  #map-canvas {
+    max-width: 100%;
+    max-height: 100%;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    display: block;
+  }
+
+  .empty-state {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    pointer-events: none;
+  }
+  .empty-state svg { opacity: 0.15; }
+  .empty-state p { font-size: 13px; color: var(--muted); }
+
+  /* ── Report Table ─────────────────────────────────── */
+  .report-section {
+    grid-area: report;
+    background: var(--panel);
+    border-top: 1px solid var(--border);
+    overflow-x: auto;
+  }
+  .report-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 20px 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .report-header h2 { font-size: 13px; font-weight: 600; color: var(--text); }
+  .best-badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    background: rgba(34,211,160,0.15);
+    color: var(--green);
+    border: 1px solid rgba(34,211,160,0.3);
+    padding: 2px 8px;
+    border-radius: 3px;
+    display: none;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  thead th {
+    padding: 8px 20px;
+    text-align: left;
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  tbody tr {
+    border-bottom: 1px solid rgba(30,45,66,0.5);
+    transition: background 0.15s;
+  }
+  tbody tr:hover { background: var(--surface); }
+  tbody td {
+    padding: 9px 20px;
+    white-space: nowrap;
+  }
+  .agent-cell {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .agent-color {
+    width: 3px; height: 16px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+  .best-row { background: rgba(34,211,160,0.05) !important; }
+  .best-row .star { color: var(--green); }
+
+  .stat-pill {
+    display: inline-block;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 6px;
+  }
+
+  @media (max-width: 700px) {
+    .app {
+      grid-template-columns: 1fr;
+      grid-template-rows: 52px auto auto auto;
+      grid-template-areas: "header" "sidebar" "map" "report";
+      height: auto;
+    }
+    .sidebar { max-height: none; }
+    .map-area { min-height: 360px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Header -->
+  <header>
+    <div class="logo-dot"></div>
+    <h1><span>FastBox</span> Dispatch Control</h1>
+    <div class="header-tag">Python Assignment · Delivery System</div>
+  </header>
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-label">Input JSON</div>
+      <textarea id="json-input" spellcheck="false">{
+  "warehouses": {
+    "W1": [0, 0],
+    "W2": [50, 75],
+    "W3": [100, 25]
+  },
+  "agents": {
+    "A1": [5, 5],
+    "A2": [60, 60],
+    "A3": [95, 30]
+  },
+  "packages": [
+    {"id": "P1", "warehouse": "W1", "destination": [30, 40]},
+    {"id": "P2", "warehouse": "W2", "destination": [70, 90]},
+    {"id": "P3", "warehouse": "W3", "destination": [105, 20]},
+    {"id": "P4", "warehouse": "W1", "destination": [10, 10]},
+    {"id": "P5", "warehouse": "W2", "destination": [40, 80]}
+  ]
+}</textarea>
+    </div>
+    <div class="controls">
+      <div class="toggle-row">
+        <span>Animate routes</span>
+        <label class="toggle">
+          <input type="checkbox" id="toggle-anim" checked>
+          <span class="toggle-track"></span>
+          <span class="toggle-thumb"></span>
+        </label>
+      </div>
+      <div class="toggle-row">
+        <span>Show grid</span>
+        <label class="toggle">
+          <input type="checkbox" id="toggle-grid" checked>
+          <span class="toggle-track"></span>
+          <span class="toggle-thumb"></span>
+        </label>
+      </div>
+      <div id="error-msg"></div>
+      <button id="run-btn">Run Simulation</button>
+    </div>
+  </aside>
+
+  <!-- Map -->
+  <main class="map-area">
+    <div class="map-toolbar">
+      <div class="legend-item">
+        <svg class="legend-sq" viewBox="0 0 10 10" fill="none">
+          <rect x="1" y="1" width="8" height="8" stroke="#00D4FF" stroke-width="1.5"/>
+        </svg>
+        Warehouse
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:#22D3A0;"></div>
+        Agent start
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:#FF6B35;border-radius:2px;transform:rotate(45deg);width:8px;height:8px;"></div>
+        Destination
+      </div>
+      <div class="legend-item">
+        <div style="width:20px;height:2px;background:linear-gradient(90deg,#00D4FF,transparent);"></div>
+        Route path
+      </div>
+    </div>
+    <div class="canvas-wrap">
+      <canvas id="map-canvas" width="700" height="500"></canvas>
+      <div class="empty-state" id="empty-state">
+        <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+          <rect x="8" y="24" width="40" height="28" rx="2" stroke="#D4E0F0" stroke-width="2"/>
+          <path d="M8 32h40M24 32v20M16 24V16a8 8 0 0116 0v8" stroke="#D4E0F0" stroke-width="2"/>
+          <circle cx="52" cy="44" r="8" stroke="#00D4FF" stroke-width="2"/>
+          <path d="M52 40v4l3 2" stroke="#00D4FF" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <p>Paste your JSON and click <strong style="color:var(--cyan)">Run Simulation</strong></p>
+      </div>
+    </div>
+  </main>
+
+  <!-- Report -->
+  <section class="report-section">
+    <div class="report-header">
+      <h2>Delivery Report</h2>
+      <div class="best-badge" id="best-badge"></div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Agent</th>
+          <th>Packages delivered</th>
+          <th>Total distance</th>
+          <th>Efficiency</th>
+          <th>Route breakdown</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="report-body">
+        <tr>
+          <td colspan="6" style="color:var(--muted);text-align:center;padding:20px;">
+            No simulation run yet.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════
+   SIMULATION ENGINE — mirrors main.py logic exactly
+════════════════════════════════════════════════════════ */
+
+function euclidean(a, b) {
+  return Math.sqrt(Math.pow(b[0]-a[0],2) + Math.pow(b[1]-a[1],2));
+}
+
+function parseInput(data) {
+  const warehouses = {};
+  const agents = {};
+  const packages = [];
+
+  // Parse warehouses (dict or list format)
+  const rw = data.warehouses || {};
+  if (Array.isArray(rw)) {
+    rw.forEach(w => { warehouses[w.id] = [...w.location]; });
+  } else {
+    Object.entries(rw).forEach(([k,v]) => { warehouses[k] = [...v]; });
+  }
+
+  // Parse agents (dict or list format)
+  const ra = data.agents || {};
+  if (Array.isArray(ra)) {
+    ra.forEach(a => { agents[a.id] = [...a.location]; });
+  } else {
+    Object.entries(ra).forEach(([k,v]) => { agents[k] = [...v]; });
+  }
+
+  // Parse packages (supports warehouse / warehouse_id keys)
+  for (const p of data.packages || []) {
+    const wh = p.warehouse || p.warehouse_id;
+    if (!p.id || !wh || !p.destination || !warehouses[wh]) continue;
+    packages.push({ id: p.id, warehouse: wh, destination: [...p.destination] });
+  }
+
+  return { warehouses, agents, packages };
+}
+
+function assignPackages(packages, agents, warehouses) {
+  const assignments = {};
+  Object.keys(agents).forEach(id => assignments[id] = []);
+
+  for (const pkg of packages) {
+    const wLoc = warehouses[pkg.warehouse];
+    let best = null, bestDist = Infinity;
+    for (const [id, aLoc] of Object.entries(agents)) {
+      const d = euclidean(aLoc, wLoc);
+      if (d < bestDist) { bestDist = d; best = id; }
+    }
+    assignments[best].push(pkg);
+  }
+  return assignments;
+}
+
+function simulate(assignments, agents, warehouses) {
+  const result = {};
+
+  for (const [agentId, packages] of Object.entries(assignments)) {
+    let pos = [...agents[agentId]];
+    let totalDist = 0;
+    const steps = [];
+    const deliveredIds = [];
+
+    for (const pkg of packages) {
+      const wLoc = warehouses[pkg.warehouse];
+      const dest = pkg.destination;
+      const leg1 = euclidean(pos, wLoc);
+      const leg2 = euclidean(wLoc, dest);
+      totalDist += leg1 + leg2;
+      steps.push({
+        packageId: pkg.id,
+        from: [...pos],
+        warehouse: [...wLoc],
+        destination: [...dest],
+        leg1: +leg1.toFixed(4),
+        leg2: +leg2.toFixed(4),
+        trip: +(leg1+leg2).toFixed(4),
+      });
+      deliveredIds.push(pkg.id);
+      pos = [...dest];
+    }
+
+    const n = deliveredIds.length;
+    result[agentId] = {
+      packages_delivered: n,
+      total_distance: +totalDist.toFixed(2),
+      efficiency: n > 0 ? +(totalDist/n).toFixed(2) : 0,
+      delivered_ids: deliveredIds,
+      steps,
+    };
+  }
+
+  // Best agent = lowest efficiency (min avg distance per package)
+  const active = Object.entries(result).filter(([,v]) => v.packages_delivered > 0);
+  const best = active.length
+    ? active.reduce((a,b) => a[1].efficiency < b[1].efficiency ? a : b)[0]
+    : null;
+  result._best = best;
+  return result;
+}
+
+/* ═══════════════════════════════════════════════════════
+   CANVAS RENDERER
+════════════════════════════════════════════════════════ */
+
+const AGENT_COLORS = ['#00D4FF','#FF6B35','#A78BFA','#22D3A0','#F5C842','#F87171'];
+
+const canvas = document.getElementById('map-canvas');
+const ctx = canvas.getContext('2d');
+let animFrameId = null;
+
+function getColor(idx) {
+  return AGENT_COLORS[idx % AGENT_COLORS.length];
+}
+
+function buildCoordMapper(warehouses, agents, packages) {
+  const allX = [], allY = [];
+  const addPt = ([x,y]) => { allX.push(x); allY.push(y); };
+  Object.values(warehouses).forEach(addPt);
+  Object.values(agents).forEach(addPt);
+  packages.forEach(p => addPt(p.destination));
+
+  const pad = 36;
+  const W = canvas.width - pad*2;
+  const H = canvas.height - pad*2;
+  const minX = Math.min(...allX), maxX = Math.max(...allX);
+  const minY = Math.min(...allY), maxY = Math.max(...allY);
+  const rx = Math.max(maxX - minX, 1);
+  const ry = Math.max(maxY - minY, 1);
+
+  return ([x, y]) => [
+    pad + (x - minX) / rx * W,
+    canvas.height - pad - (y - minY) / ry * H,
+  ];
+}
+
+function drawGrid(map, showGrid) {
+  if (!showGrid) return;
+  ctx.strokeStyle = 'rgba(30,45,66,0.7)';
+  ctx.lineWidth = 1;
+  const step = 50;
+  for (let x = 0; x <= canvas.width; x += step) {
+    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,canvas.height); ctx.stroke();
+  }
+  for (let y = 0; y <= canvas.height; y += step) {
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(canvas.width,y); ctx.stroke();
+  }
+}
+
+function drawWarehouse(cx, cy, label, highlight=false) {
+  const s = 14;
+  ctx.strokeStyle = highlight ? '#00D4FF' : 'rgba(0,212,255,0.5)';
+  ctx.lineWidth = highlight ? 2 : 1.5;
+  ctx.fillStyle = highlight ? 'rgba(0,212,255,0.12)' : 'rgba(0,212,255,0.06)';
+  ctx.beginPath();
+  ctx.rect(cx-s/2, cy-s/2, s, s);
+  ctx.fill(); ctx.stroke();
+  ctx.fillStyle = highlight ? '#00D4FF' : 'rgba(0,212,255,0.7)';
+  ctx.font = '600 9px "Space Grotesk"';
+  ctx.textAlign = 'center';
+  ctx.fillText(label, cx, cy+3);
+  ctx.fillStyle = 'rgba(0,212,255,0.5)';
+  ctx.font = '9px "Space Grotesk"';
+  ctx.fillText(label, cx, cy - s/2 - 5);
+}
+
+function drawAgent(cx, cy, label, color) {
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.arc(cx,cy,6,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#080D1A';
+  ctx.font = '700 7px "Space Grotesk"';
+  ctx.textAlign = 'center';
+  ctx.fillText(label.replace('A',''), cx, cy+2.5);
+  ctx.fillStyle = color;
+  ctx.font = '9px "Space Grotesk"';
+  ctx.fillText(label, cx, cy - 12);
+}
+
+function drawDestination(cx, cy, label, color) {
+  const r = 5;
+  ctx.fillStyle = color;
+  ctx.save(); ctx.translate(cx, cy); ctx.rotate(Math.PI/4);
+  ctx.fillRect(-r,-r,r*2,r*2);
+  ctx.restore();
+  ctx.fillStyle = 'rgba(255,107,53,0.6)';
+  ctx.font = '9px "JetBrains Mono"';
+  ctx.textAlign = 'center';
+  ctx.fillText(label, cx, cy - 10);
+}
+
+function drawRouteLine(from, to, color, progress=1, dashed=false) {
+  const [x1,y1] = from;
+  const [x2,y2] = to;
+  const ex = x1 + (x2-x1)*progress;
+  const ey = y1 + (y2-y1)*progress;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.globalAlpha = 0.6;
+  if (dashed) ctx.setLineDash([4,4]); else ctx.setLineDash([]);
+  ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(ex,ey); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.globalAlpha = 1;
+}
+
+function drawTraveller(pos, color) {
+  ctx.fillStyle = color;
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 8;
+  ctx.beginPath(); ctx.arc(pos[0],pos[1],4,0,Math.PI*2); ctx.fill();
+  ctx.shadowBlur = 0;
+}
+
+function lerp(a, b, t) { return [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t]; }
+
+/* ── Draw static snapshot ─────────────────────────────── */
+function drawStatic(warehouses, agents, result, toCanvas, showGrid) {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  // Background
+  ctx.fillStyle = '#0A0E1A';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  drawGrid(toCanvas, showGrid);
+
+  const agentIds = Object.keys(agents).sort();
+
+  // Draw all routes first
+  for (let i=0; i<agentIds.length; i++) {
+    const id = agentIds[i];
+    const color = getColor(i);
+    const steps = result[id]?.steps || [];
+    for (const step of steps) {
+      const f  = toCanvas(step.from);
+      const w  = toCanvas(step.warehouse);
+      const d  = toCanvas(step.destination);
+      drawRouteLine(f, w, color, 1, true);
+      drawRouteLine(w, d, color, 1, false);
+    }
+  }
+
+  // Destinations
+  for (let i=0; i<agentIds.length; i++) {
+    const id = agentIds[i];
+    const color = getColor(i);
+    const steps = result[id]?.steps || [];
+    for (const step of steps) {
+      const d = toCanvas(step.destination);
+      drawDestination(d[0], d[1], step.packageId, color);
+    }
+  }
+
+  // Warehouses
+  const wIds = Object.keys(warehouses).sort();
+  wIds.forEach(wid => {
+    const [cx,cy] = toCanvas(warehouses[wid]);
+    drawWarehouse(cx, cy, wid, true);
+  });
+
+  // Agents
+  agentIds.forEach((id,i) => {
+    const [cx,cy] = toCanvas(agents[id]);
+    drawAgent(cx, cy, id, getColor(i));
+  });
+}
+
+/* ── Animated delivery ────────────────────────────────── */
+function animateDeliveries(warehouses, agents, result, toCanvas, showGrid) {
+  if (animFrameId) cancelAnimationFrame(animFrameId);
+
+  const agentIds = Object.keys(agents).sort();
+  // Flatten all steps across agents with their color
+  const allSteps = [];
+  agentIds.forEach((id,i) => {
+    const color = getColor(i);
+    (result[id]?.steps || []).forEach(step => {
+      allSteps.push({ ...step, color, agentId: id });
+    });
+  });
+
+  if (!allSteps.length) { drawStatic(warehouses, agents, result, toCanvas, showGrid); return; }
+
+  const STEP_DURATION = 600; // ms per leg
+  let startTime = null;
+  const totalLegs = allSteps.length * 2; // each step has 2 legs
+
+  function frame(ts) {
+    if (!startTime) startTime = ts;
+    const elapsed = ts - startTime;
+    const globalProgress = elapsed / (STEP_DURATION * totalLegs);
+
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle = '#0A0E1A';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    drawGrid(toCanvas, showGrid);
+
+    // Draw all completed routes first (background)
+    for (let i=0; i<agentIds.length; i++) {
+      const id = agentIds[i];
+      const color = getColor(i);
+      const steps = result[id]?.steps || [];
+      for (const step of steps) {
+        const f = toCanvas(step.from);
+        const w = toCanvas(step.warehouse);
+        const d = toCanvas(step.destination);
+        // Draw as faint background
+        ctx.globalAlpha = 0.15;
+        drawRouteLine(f, w, color, 1, true);
+        drawRouteLine(w, d, color, 1, false);
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    // Animate current progress
+    let legIdx = 0;
+    for (const step of allSteps) {
+      const leg1Start = legIdx / totalLegs;
+      const leg1End   = (legIdx+1) / totalLegs;
+      const leg2Start = (legIdx+1) / totalLegs;
+      const leg2End   = (legIdx+2) / totalLegs;
+
+      const gp = Math.min(globalProgress, 1);
+
+      const f = toCanvas(step.from);
+      const w = toCanvas(step.warehouse);
+      const d = toCanvas(step.destination);
+
+      if (gp >= leg1End) {
+        // Leg 1 fully drawn
+        ctx.globalAlpha = 0.8;
+        drawRouteLine(f, w, step.color, 1, true);
+        ctx.globalAlpha = 1;
+      } else if (gp >= leg1Start) {
+        const t = (gp - leg1Start) / (leg1End - leg1Start);
+        ctx.globalAlpha = 0.8;
+        drawRouteLine(f, w, step.color, t, true);
+        ctx.globalAlpha = 1;
+        // Moving traveller on leg 1
+        drawTraveller(lerp(f, w, t), step.color);
+      }
+
+      if (gp >= leg2End) {
+        // Leg 2 fully drawn
+        ctx.globalAlpha = 0.8;
+        drawRouteLine(w, d, step.color, 1, false);
+        ctx.globalAlpha = 1;
+        drawDestination(d[0], d[1], step.packageId, step.color);
+      } else if (gp >= leg2Start) {
+        const t = (gp - leg2Start) / (leg2End - leg2Start);
+        ctx.globalAlpha = 0.8;
+        drawRouteLine(w, d, step.color, t, false);
+        ctx.globalAlpha = 1;
+        drawTraveller(lerp(w, d, t), step.color);
+      }
+
+      legIdx += 2;
+    }
+
+    // Always draw warehouses and agents on top
+    Object.keys(warehouses).sort().forEach(wid => {
+      const [cx,cy] = toCanvas(warehouses[wid]);
+      drawWarehouse(cx, cy, wid, true);
+    });
+    agentIds.forEach((id,i) => {
+      const [cx,cy] = toCanvas(agents[id]);
+      drawAgent(cx, cy, id, getColor(i));
+    });
+
+    if (globalProgress < 1) {
+      animFrameId = requestAnimationFrame(frame);
+    } else {
+      // Final static state
+      drawStatic(warehouses, agents, result, toCanvas, showGrid);
+    }
+  }
+
+  animFrameId = requestAnimationFrame(frame);
+}
+
+/* ═══════════════════════════════════════════════════════
+   REPORT TABLE
+════════════════════════════════════════════════════════ */
+
+function renderReport(result, agents) {
+  const agentIds = Object.keys(agents).sort();
+  const tbody = document.getElementById('report-body');
+  const bestBadge = document.getElementById('best-badge');
+  const best = result._best;
+
+  if (best) {
+    bestBadge.textContent = `Best agent: ${best}`;
+    bestBadge.style.display = 'inline-block';
+  }
+
+  let html = '';
+  agentIds.forEach((id, i) => {
+    const d = result[id];
+    const color = getColor(i);
+    const isBest = id === best;
+    const breakdown = d.steps.map(s =>
+      `<span style="opacity:0.7">${s.packageId}: ${s.trip.toFixed(1)}</span>`
+    ).join('  ');
+
+    html += `<tr class="${isBest ? 'best-row' : ''}">
+      <td>
+        <div class="agent-cell">
+          <div class="agent-color" style="background:${color}"></div>
+          <span style="color:${color};font-weight:600">${id}</span>
+        </div>
+      </td>
+      <td><span class="stat-pill">${d.packages_delivered}</span></td>
+      <td style="color:var(--text)">${d.total_distance.toFixed(2)}</td>
+      <td style="color:${isBest ? 'var(--green)' : 'var(--text)'};font-weight:${isBest?'600':'400'}">
+        ${d.efficiency.toFixed(2)}
+      </td>
+      <td style="font-size:10.5px">${breakdown || '<span style="opacity:0.3">no packages</span>'}</td>
+      <td class="star">${isBest ? '★ Best agent' : d.packages_delivered > 0 ? '✓ Delivered' : '— Idle'}</td>
+    </tr>`;
+  });
+
+  tbody.innerHTML = html;
+}
+
+/* ═══════════════════════════════════════════════════════
+   MAIN RUN
+════════════════════════════════════════════════════════ */
+
+function showError(msg) {
+  const el = document.getElementById('error-msg');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+function clearError() {
+  document.getElementById('error-msg').style.display = 'none';
+}
+
+document.getElementById('run-btn').addEventListener('click', () => {
+  clearError();
+
+  let raw;
+  try {
+    raw = JSON.parse(document.getElementById('json-input').value);
+  } catch(e) {
+    showError('Invalid JSON: ' + e.message);
+    return;
+  }
+
+  let parsed;
+  try {
+    parsed = parseInput(raw);
+  } catch(e) {
+    showError('Parse error: ' + e.message);
+    return;
+  }
+
+  const { warehouses, agents, packages } = parsed;
+
+  if (!Object.keys(warehouses).length) { showError('No warehouses found.'); return; }
+  if (!Object.keys(agents).length)     { showError('No agents found.'); return; }
+  if (!packages.length)                { showError('No valid packages found.'); return; }
+
+  // Hide empty state
+  document.getElementById('empty-state').style.display = 'none';
+
+  // Run simulation
+  const assignments = assignPackages(packages, agents, warehouses);
+  const result = simulate(assignments, agents, warehouses);
+
+  // Build coordinate mapper
+  const toCanvas = buildCoordMapper(warehouses, agents, packages);
+
+  const animate = document.getElementById('toggle-anim').checked;
+  const showGrid = document.getElementById('toggle-grid').checked;
+
+  if (animate) {
+    animateDeliveries(warehouses, agents, result, toCanvas, showGrid);
+  } else {
+    drawStatic(warehouses, agents, result, toCanvas, showGrid);
+  }
+
+  renderReport(result, agents);
+});
+
+// Run on load with default data
+window.addEventListener('load', () => {
+  setTimeout(() => document.getElementById('run-btn').click(), 400);
+});
+</script>
+</body>
+</html>
